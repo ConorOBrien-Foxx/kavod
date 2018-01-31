@@ -3,7 +3,7 @@
 #include <ostream>
 #include <string>
 
-const std::string INSTRUCTIONS = "-+.?~*#><`";
+const std::string INSTRUCTIONS = "-+.?~*#><}{`";
 // const std::vector<std::string> OPTIMIZE = {
     // "><",
     // "~0~"

@@ -1,0 +1,247 @@
+ret
+
+; n -> {}
+:putn
+    ; if n = 0
+    jnt putn_n0
+    ; else if n < 0
+    dup
+    call lt 0
+    jif putn_neg
+    drop
+    call putn_help
+    ret
+    ; also a function
+    :putn_help
+        ; if n is zero, return
+        jnt putn_help_end
+        ; otherwise
+            call div 10
+            call putn_help
+            add 48
+            putc
+            ret
+        
+        :putn_help_end
+        pop
+        ret
+    
+    :putn_n0
+        add 48
+        putc
+        ret
+    
+    :putn_neg
+        drop
+        putc 45
+        call neg
+        call putn_help
+        ret
+
+:neg
+    push 0
+    swap
+    sub
+    ret
+
+:gte
+    dup2
+    call gt
+    pt 8
+    call eq
+    pf 8
+    call or
+    ret
+
+:lte
+    dup2
+    call lt
+    pt 8
+    call eq
+    pf 8
+    call or
+    ret
+
+:gt
+    sub
+    call sign
+    call eq 1
+    ret
+
+:lt
+    sub
+    call sign
+    call eq -1
+    ret
+
+:eq
+    sub
+    call sign
+    jnt eq_true
+    :eq_false
+        zero
+        ret
+    :eq_true
+        add 1
+        ret
+
+:truth
+    jif truth_true
+    zero
+    ret
+    :truth_true
+    zero
+    add 1
+    ret
+
+:or
+    ; if TOS is false, continue investigation
+    jnt or_U
+    drop
+    jump or_true
+    :or_U
+        drop
+        jif or_true
+        zero
+        ret
+        
+    :or_true
+    zero
+    add 1
+    ret
+
+:and
+    jif and_U
+    drop
+    jump and_false
+    :and_U
+        drop
+        jnt and_false
+        zero
+        add 1
+        ret
+    
+    :and_false
+    zero
+    ret
+
+:sign
+    jif sign_not0
+    ; only 0 passes here; since sign of 0 is 0, return
+    ret
+    :sign_not0
+    ; the old "increment-decrement" approach
+    dup
+    :sign_loop
+        add 1
+        jnt sign_neg
+        swap
+        sub 1
+        jnt sign_pos
+        swap
+        jump sign_loop
+    :sign_pos
+        ; <some number> 0
+        add 1
+        jump sign_end
+    :sign_neg
+        ; <some number> 0
+        sub 1
+        jump sign_end
+    :sign_end
+        swap
+        drop
+        ret
+
+;; UNSIGNED DIVMOD ;;
+; https://en.wikipedia.org/wiki/Division_algorithm#Division_by_repeated_subtraction
+; args: N D <divun>
+; result: Remainder Quotient
+:divun
+    pt 8 0 ;Q
+    :divun_loop
+    dup2
+    ; stack: N D N D
+    call gte
+    ; stack: N D (N>=D)
+    jnt divun_end
+        ; N is now < D
+        drop ; remove conditional
+        ; Q++
+        pf 8
+        add 1
+        pt 8
+        ; stack: N D
+        copy
+        ; stack: N D
+        ; reg: D
+        sub
+        load
+        ; stack: (N-D) D
+        jump divun_loop
+    
+    :divun_end
+    ; stack 8: Q
+    ; stack: R D 0
+    drop
+    drop
+    pf 8
+    ; stack: R Q
+    ret
+
+;; SIGNED DIVISION ;;
+; much less complicated, yet control structures are BLEH.
+; stack: N D
+:div
+    dup
+    call lt 0
+    ; if D < 0
+    jif div_dneg
+    drop
+    
+    swap
+    dup
+    call lt 0
+    ; if N < 0
+    jif div_nneg
+    drop
+    ; else
+        swap
+        call divun
+        ret
+    
+    ; D < 0; return R, -Q
+    :div_dneg
+        drop
+        call neg
+        call div
+        ; R Q
+        call neg
+        ; R -Q
+        ret
+    
+    :div_nneg
+        drop
+        call neg
+        swap
+        copy
+        call div
+        swap
+        ; if R = 0
+        jnt div_nneg_r0
+        ; else
+            load
+            swap
+            sub
+            swap
+            call neg
+            sub 1
+            ret
+        
+        ; R = 0
+        :div_nneg_r0
+            load ;
+            drop ; clear TOS register
+            swap
+            call neg
+            ret

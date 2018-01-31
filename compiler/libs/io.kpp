@@ -1,0 +1,11 @@
+ret
+
+:puts
+    jnt puts_end
+    sub 1
+    pt 8
+    putc
+    pf 8
+    jump puts
+    :puts_end
+    ret

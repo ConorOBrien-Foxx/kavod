@@ -24,6 +24,8 @@ Note 2: "Pop `A, B`" means that the stack ends with `B` and `A` is before `B`, l
 | `?`     | Pop `N`, peek `C`: if `C` is nonzero, go to token position `N`. |
 | `>`     | Peek `A`: push `A` to the register stack. |
 | `<`     | Pop `A` from the register stack: push `A`. |
+| `}`     | Pop `A, R`: push `A` to stack `R`. |
+| `{`     | Pop `A` from stack `R`: push `A`. |
 | `~`     | Pop `R`: set the current stack to `R`. |
 | `*`     | Read a byte from the input and push it to the stack (-1 if EOF). |
 | `#`     | Output a byte. |

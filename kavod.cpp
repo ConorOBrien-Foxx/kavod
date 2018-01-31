@@ -161,6 +161,14 @@ void Kavod::exec(char op) {
     else if(op == '<') {
         push(pop_from(REGISTER_STACK_PTR));
     }
+    else if(op == '}') {
+        int loc = pop();
+        push_to(loc, pop());
+    }
+    else if(op == '{') {
+        int loc = pop();
+        push(pop_from(loc));
+    }
     else if(op == '~') {
         stack_ptr = pop();
     }
@@ -185,22 +193,22 @@ void Kavod::exec(char op) {
     }
 }
 
-// unused currently
-void Kavod::exec_multi(std::string str) {
-    if(str == "><") {
-        // duplicate TOS
-        push(peek());
-    }
-    else if(str == "~0~") {
-        // pop TOS, move to stack 0
-        pop();
-        stack_ptr = 0;
-    }
-    else {
-        std::cerr << "Unhandled optimization instruction \"" << str
-                  << "\"." << std::endl;
-    }
-}
+// // unused currently
+// void Kavod::exec_multi(std::string str) {
+    // if(str == "><") {
+        // // duplicate TOS
+        // push(peek());
+    // }
+    // else if(str == "~0~") {
+        // // pop TOS, move to stack 0
+        // pop();
+        // stack_ptr = 0;
+    // }
+    // else {
+        // std::cerr << "Unhandled optimization instruction \"" << str
+                  // << "\"." << std::endl;
+    // }
+// }
 
 void Kavod::step() {
     Token cur = program[pc];
@@ -263,6 +271,15 @@ int main(int argc, char** argv) {
     // todo: better arg handler
     if(strcmp(argv[1], "-e") == 0) {
         program = argv[2];
+    }
+    else if(strcmp(argv[1], "-t") == 0) {
+        program = read_file(argv[2]);
+        int i = 0;
+        for(Token t : TokenMachine::tokenize(program)) {
+            std::cout << "Token[" << i << "] = " << t << std::endl;
+            i++;
+        }
+        return 0;
     }
     else {
         program = read_file(argv[1]);

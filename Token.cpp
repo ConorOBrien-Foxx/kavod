@@ -21,6 +21,8 @@ std::string token_type_str(TokenType t) {
             return "instruction";
         case TokenType::unknown:
             return "unknown";
+        case TokenType::whitespace:
+            return "whitespace";
         default:
             return "(unimplemented)";
     }
