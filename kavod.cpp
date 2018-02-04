@@ -255,6 +255,7 @@ void Kavod::run() {
 
 void Kavod::debug() {
     std::cout << "Position: " << pc << std::endl;
+    std::cout << "Current stack: " << stack_ptr << std::endl;
     for(auto const& keyPair : stacks) {
         int ref = keyPair.first;
         Stack stack = keyPair.second;

@@ -1,11 +1,88 @@
+.section "io.kpp"
+.lib std
 ret
 
-:puts
-    jnt puts_end
-    sub 1
-    pt 8
-    putc
-    pf 8
-    jump puts
-    :puts_end
+:putn
+    ; if n = 0
+    jnt putn_n0
+    ; else if n < 0
+    dup
+    call lt 0
+    jif putn_neg
+    drop
+    call putn_help
     ret
+    ; also a function
+    :putn_help
+        ; if n is zero, return
+        jnt putn_help_end
+        ; otherwise
+            call divmodun 10
+            call putn_help
+            add 48
+            putc
+            ret
+        
+        :putn_help_end
+        pop
+        ret
+    
+    :putn_n0
+        add 48
+        putc
+        ret
+    
+    :putn_neg
+        drop
+        putc 45
+        call neg
+        call putn_help
+        ret
+
+; puts <start> <return>
+:puts
+    pt 8
+    focus safe
+    ; copy length for later use
+    dup
+    pt 8
+    :puts_loop
+        jnt puts_cont
+        sub 1
+        ; move iter out of the way
+        pt 8
+        ; main logic
+        copy
+        putc
+        ; restore iter
+        pf 8
+        jump puts_loop
+        
+    :puts_cont
+    
+    ; todo: find pop
+    drop
+    pf 8
+    dup
+    pt 8
+    :puts_restore
+        jnt puts_end
+        sub 1
+        load
+        swap
+        jump puts_restore
+    
+    :puts_end
+    pf 8
+    add
+    pf 8
+    focus safe
+    
+    
+    ret
+    
+    
+    
+    
+    
+    

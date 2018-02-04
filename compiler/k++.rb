@@ -3,7 +3,13 @@
 # compiler for the kavod language
 
 def parse_line(line)
-    line.gsub(/;.*$/, "").strip.split
+    line.gsub(/;.*$/, "").strip.scan(/"[^"]*"|[.:]?\w+|-?\d+/).map { |e|
+        if e[0] == '"'
+            e[1..-2]
+        else
+            e
+        end
+    }
 end
 
 def kavod_tokens(program)
@@ -11,15 +17,16 @@ def kavod_tokens(program)
 end
 
 class Temporary
-    def initialize(name)
+    def initialize(name, source=nil)
         @name = name
+        @source = source
     end
-    attr_accessor :name
+    attr_accessor :name, :source
 end
 
 class Compiler
     @@call_stack_ref = 9
-    def initialize(program)
+    def initialize(program, current="main")
         @tokens = []
         @lines = program.lines
         @token_pos = 0
@@ -28,6 +35,10 @@ class Compiler
         @labels = {}
         @temp_domains = {}
         @included_libs = []
+        @meta = {
+            offset: 0,
+            current: current
+        }
         push Temporary.new "eof"
         push "9}"
         # push "9}0 9}"
@@ -60,7 +71,7 @@ class Compiler
     
     def push_label(name)
         if @labels[name].nil?
-            push Temporary.new name
+            push Temporary.new name, @i
         else
             push @labels[name]
         end
@@ -73,17 +84,13 @@ class Compiler
         res
     end
     
-    def push_string(s)
-        s.reverse.chars.each { |c|
-            push "#{c.ord}"
-        }
-        push "#{s.size}"
-    end
-    
     def append_lib(name)
         return if @included_libs.include? name
         @included_libs << name
-        @lines.concat File.read("./libs/#{name}.kpp").lines
+        # p "asdf"
+        file_name = "./libs/#{name}.kpp"
+        # p file_name
+        @lines.concat File.read(file_name).lines
     end
     
     def push_data(str)
@@ -97,8 +104,37 @@ class Compiler
                 push str
             end
         else
-            STDERR.puts "I have no idea what you mean by #{str.inspect}"
-            exit -1
+            error "I have no idea what you mean by #{str.inspect}"
+        end
+    end
+    
+    def line_message(i=@i)
+        "#{@meta[:current]}:#{i - @meta[:offset]}"
+    end
+    
+    def error(msg, code=-1, i=@i)
+        i += 1
+        # p @meta
+        STDERR.puts "Error [#{line_message i}]: #{msg}"
+        # STDERR.puts "On line: #{@lines[i].inspect}"
+        # STDERR.puts "Error [#{@meta[:current]}:#{i}]: #{msg}"
+        exit code
+    end
+    
+    def set_label(name, val=@token_pos)
+        unless @labels[name].nil?
+            error "Duplicate label :#{name}", -4
+        end
+        @labels[name] = val
+    end
+    
+    def arity_error(source, args, expected)
+        error "Unsupported arity #{args.size} for #{source.inspect}; expected #{expected}", -4
+    end
+    
+    def ensure_arity(arity, source, args)
+        unless [*arity].include? args.size
+            arity_error(source, args, arity)
         end
     end
     
@@ -108,12 +144,32 @@ class Compiler
         return if head.nil?
         
         case head
-            when "lib"
+            # meta
+            when ".section"
+                ensure_arity 1, head, args
+                @meta[:offset] = @i
+                @meta[:current] = args[0]
+                
+                
+            when ".lib"
+                ensure_arity 1, head, args
                 args.each { |a|
                     append_lib a
                 }
+            
+            when "string", "str"
+                ensure_arity 2, head, args
+                pos, str = args
+                str.chars.reverse_each { |c|
+                    exec "pushto #{pos} #{c.ord}"
+                }
+                exec "pushto #{pos} #{str.size}"
+            
+            # regular
             when "push"
+                ensure_arity 1, head, args
                 push_data args[0]
+            
             when "add"
                 case args.size
                     when 0
@@ -122,8 +178,9 @@ class Compiler
                         exec "push #{args[0]}"
                         push "+"
                     else
-                        STDERR.puts "Unsupported arity for #{head}: #{args.size}"
+                        arity_error head, args, 0..1
                 end
+            
             when "sub"
                 case args.size
                     when 0
@@ -132,26 +189,51 @@ class Compiler
                         exec "push #{args[0]}"
                         push "-"
                     else
-                        STDERR.puts "Unsupported arity for #{head}: #{args.size}"
+                        arity_error head, args, 0..1
                 end
+            
             when "jump"
+                ensure_arity 1, head, args
                 push_label args[0]
                 push "."
+            
             when "pop"
-                push "~#{@focus}~"
+                ensure_arity 0..1, head, args
+                push "~#{args[0] || @focus}~"
+            
             when "drop"
+                ensure_arity 0, head, args
                 push "><-+"
-            # when "zero2"
-                # push "+><-"
+            
             when "zero"
+                ensure_arity 0, head, args
                 push "><-"
-                # push "~#{@focus}~"
+            
             when "dup"
+                ensure_arity 0, head, args
                 push "><"
+            
             when "dup2"
+                ensure_arity 0, head, args
                 push ">#{@focus^8}}>#{@focus^8}~>~#{@focus}~<<<"
+            
             when "focus"
-                push "#{args[0]}~"
+                case args.size
+                    when 0
+                        STDERR.puts "Warning: be sure to return to #{@focus}"
+                        STDERR.puts "[#{line_message}] #{line}"
+                        push "~"
+                    when 1
+                        if /safe/i === args[0]
+                            push "~"
+                        else
+                            push "#{args[0]}~"
+                            @focus = args[0].to_i
+                        end
+                    else
+                        arity_error head, args, 0..1
+                end
+            
             when "pushto", "pt"
                 case args.size
                     when 1
@@ -160,36 +242,53 @@ class Compiler
                         exec "push #{args[1]}"
                         exec "pushto #{args[0]}"
                     else
-                        STDERR.puts "Unsupported arity for #{head}: #{args.size}"
+                        arity_error head, args, 1..2
                 end
+            
             when "popfrom", "pf"
+                ensure_arity 1, head, args
                 push "#{args[0]}{"
+            
             when "getc"
+                ensure_arity 0, head, args
                 push "*"
-            when "pst"
-                push_string args.join " "
+            
             when "swap"
+                ensure_arity 0, head, args
                 push "#{@focus^8}}#{@focus^9}}#{@focus^8}{#{@focus^9}{"
+            
             when "copy"
-                push ">"
+                case args.size
+                    when 0
+                        push ">"
+                    when 1
+                        exec "push #{args[0]}"
+                        push ">"
+                        exec "pop"
+                    else
+                        arity_error head, args, 0..1
+                end
+            
             when "load"
+                ensure_arity 0, head, args
                 push "<"
+            
             when "debug"
+                ensure_arity 0, head, args
                 push "`"
+            
             when "jif"
+                ensure_arity 1, head, args
                 push_label args[0]
                 push "?"
+            
             when "jnt"
-                # jif continue
-                # jump <label>
-                # :continue
-                # ...
-                # :<label>
+                ensure_arity 1, head, args
                 temp = get_label "jnt"
                 push_label temp
                 push "?"
                 exec "jump #{args[0]}"
-                @labels[temp] = @token_pos
+                set_label temp
                 
             when "call"
                 args[1..-1].each { |a|
@@ -198,13 +297,11 @@ class Compiler
                 temp = get_label "call"
                 push_label temp
                 exec "pushto #{@@call_stack_ref}"
-                # exec "pushto #{@@call_stack_ref} #{@focus}"
                 exec "jump #{args[0]}"
-                @labels[temp] = @token_pos
+                set_label temp
                 
             when "ret"
-                # exec "popfrom #{@@call_stack_ref}"
-                # push "~"
+                ensure_arity 0, head, args
                 exec "popfrom #{@@call_stack_ref}"
                 push "."
                 
@@ -217,11 +314,12 @@ class Compiler
                 else
                     push "#"
                 end
+            
             when /^:(\w+)/
-                @labels[$1] = @token_pos
+                set_label $1
+            
             else
-                STDERR.puts "Error: Non-existant command #{head}"
-                exit -3
+                error "Non-existant command #{head}", -3
         end
     end
     
@@ -230,11 +328,11 @@ class Compiler
             if tok.is_a? Temporary
                 res = @labels[tok.name]
                 if res.nil?
-                    STDERR.puts "Error: Non-existant label :#{tok.name}"
+                    msg = "Non-existant label :#{tok.name}"
                     if tok.name.start_with? ":"
-                        STDERR.puts "Perhaps you meant :#{tok.name[1..-1]}?"
+                        msg += "\nPerhaps you meant :#{tok.name[1..-1]}?"
                     end
-                    exit -2
+                    error msg, -2, tok.source
                 end
                 res
             else
@@ -258,5 +356,5 @@ end
 
 prog = File.read ARGV[0]
 
-c = Compiler.new prog
+c = Compiler.new prog, ARGV[0]
 print c.compile

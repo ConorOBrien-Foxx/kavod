@@ -1,42 +1,33 @@
+.section "std.kpp"
+
 ret
 
-; n -> {}
-:putn
-    ; if n = 0
-    jnt putn_n0
-    ; else if n < 0
-    dup
-    call lt 0
-    jif putn_neg
+:mul
+    jnt mul_zero
+    swap
+    jnt mul_zero
+    copy
+    zero
+    swap
+    :mul_loop
+        sub 1
+        swap
+        load
+        copy
+        add
+        swap
+        jif mul_loop
+    jump mul_end
+    
+    :mul_zero
+        swap
+        jump mul_end
+    
+    :mul_end
+    load
     drop
-    call putn_help
+    drop
     ret
-    ; also a function
-    :putn_help
-        ; if n is zero, return
-        jnt putn_help_end
-        ; otherwise
-            call div 10
-            call putn_help
-            add 48
-            putc
-            ret
-        
-        :putn_help_end
-        pop
-        ret
-    
-    :putn_n0
-        add 48
-        putc
-        ret
-    
-    :putn_neg
-        drop
-        putc 45
-        call neg
-        call putn_help
-        ret
 
 :neg
     push 0
@@ -153,18 +144,63 @@ ret
         drop
         ret
 
+:divmodun
+    ; vars: i, m
+    pt 8 0 ; i
+    pt 8 0 ; m
+    swap
+    add 1 ; x++ -- used instead of <= because its faster
+    :divmodun_loop
+        ; y (x+1)
+        ; 8: i m
+        pf 8 ; m
+        copy
+        swap
+        copy
+        ; y m (x+1)
+        ; -1: m (x+1)
+        call lt
+        ; y (m < x+1)
+        jnt divmodun_loop_end
+        drop
+        load
+        pt 7
+        dup
+        load
+        add
+        pf 8
+        add 1
+        pt 8
+        pt 8
+        pf 7
+        jump divmodun_loop
+    
+    :divmodun_loop_end
+    drop
+    ; y
+    ; -1: m (x+1)
+    ; 8: i
+    load
+    sub 1
+    add
+    load
+    sub
+    pf 8
+    sub 1
+    ret
+
 ;; UNSIGNED DIVMOD ;;
 ; https://en.wikipedia.org/wiki/Division_algorithm#Division_by_repeated_subtraction
 ; args: N D <divun>
 ; result: Remainder Quotient
-:divun
+:trial_divmodun
     pt 8 0 ;Q
-    :divun_loop
+    :trial_divun_loop
     dup2
     ; stack: N D N D
     call gte
     ; stack: N D (N>=D)
-    jnt divun_end
+    jnt trial_divun_end
         ; N is now < D
         drop ; remove conditional
         ; Q++
@@ -178,9 +214,9 @@ ret
         sub
         load
         ; stack: (N-D) D
-        jump divun_loop
+        jump trial_divun_loop
     
-    :divun_end
+    :trial_divun_end
     ; stack 8: Q
     ; stack: R D 0
     drop
@@ -192,43 +228,43 @@ ret
 ;; SIGNED DIVISION ;;
 ; much less complicated, yet control structures are BLEH.
 ; stack: N D
-:div
+:divmod
     dup
     call lt 0
     ; if D < 0
-    jif div_dneg
+    jif divmod_dneg
     drop
     
     swap
     dup
     call lt 0
     ; if N < 0
-    jif div_nneg
+    jif divmod_nneg
     drop
     ; else
         swap
-        call divun
+        call divmod
         ret
     
     ; D < 0; return R, -Q
-    :div_dneg
+    :divmod_dneg
         drop
         call neg
-        call div
+        call divmod
         ; R Q
         call neg
         ; R -Q
         ret
     
-    :div_nneg
+    :divmod_nneg
         drop
         call neg
         swap
         copy
-        call div
+        call divmod
         swap
         ; if R = 0
-        jnt div_nneg_r0
+        jnt divmod_nneg_r0
         ; else
             load
             swap
@@ -239,7 +275,7 @@ ret
             ret
         
         ; R = 0
-        :div_nneg_r0
+        :divmod_nneg_r0
             load ;
             drop ; clear TOS register
             swap
